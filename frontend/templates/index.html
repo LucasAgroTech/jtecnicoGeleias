@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prêmio CNA Brasil Artesanal - Geleia</title>
+    <link rel="stylesheet" href="../static/css/styles.css">
+    <link rel="manifest" href="../static/manifest.json">
+    <meta name="theme-color" content="#3498db">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Prêmio CNA Brasil Artesanal - Geleia</h1>
+            <div id="connection-status">Online</div>
+            <div class="navigation" style="margin-top: 10px; text-align: right;">
+                <a href="/sync" class="nav-button">Sincronização</a>
+                <a href="/config" class="nav-button">Configuração</a>
+            </div>
+            <div id="header-image-container">
+                <img id="header-image" src="../static/images/header.png" alt="Imagem de cabeçalho">
+            </div>
+        </header>
+        
+        <form id="rating-form">
+            <div class="form-group">
+                <label for="identifier">Código da Geleia</label>
+                <div class="identifier-container">
+                    <select id="identifier" required>
+                        <option value="">Selecione um código</option>
+                        <!-- CNA codes will be populated via JavaScript -->
+                    </select>
+                    <button type="button" id="lock-toggle" class="lock-btn">
+                        <span class="lock-icon">🔒</span>
+                    </button>
+                </div>
+                <div id="unlock-panel" class="hidden">
+                    <input type="password" id="unlock-password" placeholder="Senha para desbloquear">
+                    <div class="unlock-buttons">
+                        <button type="button" id="unlock-btn">Desbloquear</button>
+                        <button type="button" id="cancel-unlock-btn">Cancelar</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label>Avaliação</label>
+                <div class="rating-buttons">
+                    <button type="button" class="rating-btn" data-value="1">😖</button>
+                    <button type="button" class="rating-btn" data-value="2">😞</button>
+                    <button type="button" class="rating-btn" data-value="3">😕</button>
+                    <button type="button" class="rating-btn" data-value="4">😐</button>
+                    <button type="button" class="rating-btn" data-value="5">🙂</button>
+                    <button type="button" class="rating-btn" data-value="6">😊</button>
+                    <button type="button" class="rating-btn" data-value="7">😄</button>
+                    <button type="button" class="rating-btn" data-value="8">😍</button>
+                    <button type="button" class="rating-btn" data-value="9">🤩</button>
+                </div>
+                <div class="emoji-legend">
+                    <span>Não gostei</span>
+                    <span>Adorei!</span>
+                </div>
+                <input type="hidden" id="rating" required>
+            </div>
+            
+            <button type="submit" id="submit-btn">Enviar Avaliação da Geleia</button>
+        </form>
+    </div>
+    
+    <script src="../static/js/db.js"></script>
+    <script src="../static/js/sync.js"></script>
+    <script src="../static/js/app.js"></script>
+</body>
+</html>

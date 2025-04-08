@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prêmio CNA Brasil Artesanal - Configuração</title>
+    <link rel="stylesheet" href="../static/css/styles.css">
+    <link rel="manifest" href="../static/manifest.json">
+    <meta name="theme-color" content="#3498db">
+    <style>
+        .config-panel {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+        
+        .config-form {
+            margin-top: 20px;
+        }
+        
+        .config-form label {
+            display: block;
+            margin-bottom: 8px;
+        }
+        
+        .config-form select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+            margin-bottom: 20px;
+        }
+        
+        .config-form button {
+            padding: 10px 20px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        
+        .config-form button:hover {
+            background-color: #2980b9;
+        }
+        
+        .device-info {
+            margin-top: 30px;
+            padding: 15px;
+            background-color: #f0f0f0;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .device-info p {
+            margin: 5px 0;
+        }
+        
+        .password-panel {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #ffecec;
+            border-radius: 4px;
+            border: 1px solid #ffcdd2;
+        }
+        
+        .password-panel input {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Prêmio CNA Brasil Artesanal - Configuração</h1>
+            <div id="connection-status">Online</div>
+        </header>
+        
+        <div class="password-panel" id="password-panel">
+            <h3>Acesso Restrito</h3>
+            <p>Esta página é restrita. Digite a senha para continuar:</p>
+            <input type="password" id="config-password" placeholder="Senha">
+            <button id="unlock-config-btn">Acessar</button>
+        </div>
+        
+        <div class="config-panel hidden" id="config-content">
+            <h2>Configuração do Tablet</h2>
+            <p>Configure este tablet para uso no evento. Cada tablet deve ter um número único (1-12).</p>
+            
+            <div class="config-form">
+                <label for="tablet-number">Número do Tablet:</label>
+                <select id="tablet-number">
+                    <option value="0">Selecione um número</option>
+                    <option value="1">Tablet 1</option>
+                    <option value="2">Tablet 2</option>
+                    <option value="3">Tablet 3</option>
+                    <option value="4">Tablet 4</option>
+                    <option value="5">Tablet 5</option>
+                    <option value="6">Tablet 6</option>
+                    <option value="7">Tablet 7</option>
+                    <option value="8">Tablet 8</option>
+                    <option value="9">Tablet 9</option>
+                    <option value="10">Tablet 10</option>
+                    <option value="11">Tablet 11</option>
+                    <option value="12">Tablet 12</option>
+                </select>
+                
+                <button id="save-config-btn">Salvar Configuração</button>
+            </div>
+            
+            <div class="device-info">
+                <h3>Informações do Dispositivo</h3>
+                <p><strong>ID do Dispositivo:</strong> <span id="device-id">-</span></p>
+                <p><strong>Número do Tablet:</strong> <span id="current-tablet-number">-</span></p>
+                <p><strong>Status do Service Worker:</strong> <span id="sw-status">-</span></p>
+                <p><strong>Versão do Cache:</strong> <span id="cache-version">-</span></p>
+                <p><strong>Avaliações Pendentes:</strong> <span id="pending-count">-</span></p>
+            </div>
+        </div>
+        
+        <div class="navigation">
+            <a href="/" class="nav-button">Voltar para Avaliação</a>
+            <a href="/sync" class="nav-button">Ir para Sincronização</a>
+        </div>
+    </div>
+    
+    <script src="../static/js/db.js"></script>
+    <script src="../static/js/sync.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Constantes
+            const CONFIG_PASSWORD = 'geleia123';
+            const STORAGE_KEY_TABLET_NUMBER = 'tablet_number';
+            
+            // Elementos da página
+            const passwordPanel = document.getElementById('password-panel');
+            const configContent = document.getElementById('config-content');
+            const passwordInput = document.getElementById('config-password');
+            const unlockBtn = document.getElementById('unlock-config-btn');
+            const tabletNumberSelect = document.getElementById('tablet-number');
+            const saveConfigBtn = document.getElementById('save-config-btn');
+            const deviceIdSpan = document.getElementById('device-id');
+            const currentTabletNumberSpan = document.getElementById('current-tablet-number');
+            const swStatusSpan = document.getElementById('sw-status');
+            const cacheVersionSpan = document.getElementById('cache-version');
+            const pendingCountSpan = document.getElementById('pending-count');
+            
+            // Inicializa o gerenciador de sincronização
+            const syncManager = new SyncManager(db);
+            
+            // Verifica o status do Service Worker
+            function checkServiceWorker() {
+                if ('serviceWorker' in navigator) {
+                    navigator.serviceWorker.getRegistration().then(registration => {
+                        if (registration) {
+                            swStatusSpan.textContent = 'Ativo';
+                            swStatusSpan.style.color = '#2ecc71';
+                        } else {
+                            swStatusSpan.textContent = 'Inativo';
+                            swStatusSpan.style.color = '#e74c3c';
+                        }
+                    });
+                } else {
+                    swStatusSpan.textContent = 'Não Suportado';
+                    swStatusSpan.style.color = '#e74c3c';
+                }
+            }
+            
+            // Atualiza informações do dispositivo
+            function updateDeviceInfo() {
+                // Device ID
+                const deviceId = localStorage.getItem('device_id') || 'Não definido';
+                deviceIdSpan.textContent = deviceId;
+                
+                // Tablet Number
+                const tabletNumber = localStorage.getItem(STORAGE_KEY_TABLET_NUMBER) || 'Não definido';
+                currentTabletNumberSpan.textContent = tabletNumber;
+                
+                // Cache Version
+                cacheVersionSpan.textContent = 'v2';
+                
+                // Pending Count
+                db.getUnsyncedCount().then(count => {
+                    pendingCountSpan.textContent = count;
+                });
+            }
+            
+            // Inicializa o select com o valor atual
+            function initTabletNumberSelect() {
+                const currentTabletNumber = localStorage.getItem(STORAGE_KEY_TABLET_NUMBER);
+                if (currentTabletNumber) {
+                    tabletNumberSelect.value = currentTabletNumber;
+                }
+            }
+            
+            // Registra Service Worker
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('../../../sw.js')
+                    .then(registration => {
+                        console.log('Service Worker registered with scope:', registration.scope);
+                        checkServiceWorker();
+                    })
+                    .catch(error => {
+                        console.error('Service Worker registration failed:', error);
+                        swStatusSpan.textContent = 'Erro ao registrar';
+                        swStatusSpan.style.color = '#e74c3c';
+                    });
+            }
+            
+            // Event listener para o botão de desbloquear
+            unlockBtn.addEventListener('click', () => {
+                const password = passwordInput.value;
+                
+                if (password === CONFIG_PASSWORD) {
+                    passwordPanel.classList.add('hidden');
+                    configContent.classList.remove('hidden');
+                    
+                    // Inicializa a página de configuração
+                    initTabletNumberSelect();
+                    updateDeviceInfo();
+                } else {
+                    alert('Senha incorreta!');
+                    passwordInput.value = '';
+                }
+            });
+            
+            // Permite pressionar Enter no campo de senha
+            passwordInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    unlockBtn.click();
+                }
+            });
+            
+            // Event listener para o botão de salvar configuração
+            saveConfigBtn.addEventListener('click', () => {
+                const tabletNumber = tabletNumberSelect.value;
+                
+                if (tabletNumber === '0') {
+                    alert('Por favor, selecione um número de tablet válido (1-12).');
+                    return;
+                }
+                
+                localStorage.setItem(STORAGE_KEY_TABLET_NUMBER, tabletNumber);
+                alert(`Tablet configurado com sucesso como Tablet ${tabletNumber}.`);
+                
+                // Atualiza as informações exibidas
+                updateDeviceInfo();
+            });
+        });
+    </script>
+</body>
+</html>

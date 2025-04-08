@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prêmio CNA Brasil Artesanal - Sincronização</title>
+    <link rel="stylesheet" href="../static/css/styles.css">
+    <link rel="manifest" href="../static/manifest.json">
+    <meta name="theme-color" content="#3498db">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Prêmio CNA Brasil Artesanal - Sincronização</h1>
+            <div id="connection-status">Online</div>
+        </header>
+        
+        <div class="status-panel">
+            <h2>Status da Sincronização</h2>
+            <div id="sync-status">
+                <p>Registros pendentes: <span id="pending-count">0</span></p>
+                <p>Último sincronizado: <span id="last-sync">Nunca</span></p>
+                <button id="force-sync">Forçar Sincronização</button>
+            </div>
+        </div>
+        
+        <div class="navigation">
+            <a href="/" class="nav-button">Voltar para Avaliação</a>
+            <a href="/config" class="nav-button">Configuração do Tablet</a>
+        </div>
+    </div>
+    
+    <script src="../static/js/db.js"></script>
+    <script src="../static/js/sync.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Registra Service Worker
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('../../../sw.js')
+                    .then(registration => {
+                        console.log('Service Worker registered with scope:', registration.scope);
+                    })
+                    .catch(error => {
+                        console.error('Service Worker registration failed:', error);
+                    });
+            }
+            
+            // Inicializa o gerenciador de sincronização
+            const syncManager = new SyncManager(db);
+            
+            // Botão para forçar sincronização
+            const forceSyncButton = document.getElementById('force-sync');
+            forceSyncButton.addEventListener('click', () => {
+                if (navigator.onLine) {
+                    syncManager.syncData();
+                } else {
+                    alert('Você está offline. Conecte-se à Internet para sincronizar.');
+                }
+            });
+        });
+    </script>
+</body>
+</html>
