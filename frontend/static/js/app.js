@@ -1,4 +1,42 @@
 document.addEventListener('DOMContentLoaded', () => {
+  // Verifica o status da conexão e mostra mensagem se estiver offline
+  if (!navigator.onLine) {
+    console.log('Aplicativo iniciado em modo offline');
+    setTimeout(() => {
+      // Mostra uma mensagem amigável informando que o app está funcionando offline
+      const toast = document.createElement('div');
+      toast.id = 'offline-toast';
+      toast.innerHTML = `
+        <div style="display: flex; align-items: center;">
+          <span style="margin-right: 10px;">📴</span>
+          <span>Você está offline, mas o aplicativo está funcionando normalmente.</span>
+        </div>
+      `;
+      toast.style.cssText = `
+        position: fixed;
+        top: 60px;
+        left: 50%;
+        transform: translateX(-50%);
+        background-color: #333;
+        color: white;
+        padding: 12px 20px;
+        border-radius: 4px;
+        z-index: 1000;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        max-width: 90%;
+      `;
+      
+      document.body.appendChild(toast);
+      
+      // Remove após 5 segundos
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.5s';
+        setTimeout(() => toast.remove(), 500);
+      }, 5000);
+    }, 1000);
+  }
+  
     // Lista de códigos CNA para geleia
     const cnaCodes = [
       'CNA-5438',
@@ -15,12 +53,21 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Registra Service Worker
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('../../../sw.js')
+      navigator.serviceWorker.register('/sw.js')
         .then(registration => {
           console.log('Service Worker registered with scope:', registration.scope);
         })
         .catch(error => {
           console.error('Service Worker registration failed:', error);
+          console.log('Tentando caminho alternativo...');
+          // Tenta um caminho alternativo se o primeiro falhar
+          navigator.serviceWorker.register('./sw.js')
+            .then(registration => {
+              console.log('Service Worker registrado com caminho alternativo, scope:', registration.scope);
+            })
+            .catch(altError => {
+              console.error('Falha no registro do Service Worker com caminho alternativo:', altError);
+            });
         });
     }
     

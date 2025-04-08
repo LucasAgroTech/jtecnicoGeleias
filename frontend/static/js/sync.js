@@ -55,7 +55,49 @@ class SyncManager {
     
     handleOnline() {
       this.updateConnectionStatus();
-      this.syncData();
+      
+      // Tenta sincronizar quando ficar online
+      setTimeout(() => {
+        this.syncData();
+      }, 1000); // Pequeno atraso para garantir que a conexão está estável
+      
+      // Notifica o usuário que está online novamente
+      this.showToast('Você está online novamente. Sincronizando dados...');
+    }
+    
+    // Mostra uma mensagem toast temporária
+    showToast(message) {
+      // Verifica se já existe um toast e remove
+      const existingToast = document.getElementById('sync-toast');
+      if (existingToast) {
+        existingToast.remove();
+      }
+      
+      // Cria um novo elemento toast
+      const toast = document.createElement('div');
+      toast.id = 'sync-toast';
+      toast.textContent = message;
+      toast.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background-color: #333;
+        color: white;
+        padding: 12px 20px;
+        border-radius: 4px;
+        z-index: 1000;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      `;
+      
+      document.body.appendChild(toast);
+      
+      // Remove após 3 segundos
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.5s';
+        setTimeout(() => toast.remove(), 500);
+      }, 3000);
     }
     
     async syncData() {
