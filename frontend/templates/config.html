@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Prêmio CNA Brasil Artesanal - Configuração</title>
     <link rel="stylesheet" href="../static/css/styles.css">
-    <link rel="manifest" href="../static/manifest.json">
+    <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#3498db">
     <style>
         .config-panel {
@@ -189,7 +189,7 @@
                 currentTabletNumberSpan.textContent = tabletNumber;
                 
                 // Cache Version
-                cacheVersionSpan.textContent = 'v2';
+                cacheVersionSpan.textContent = 'v8';
                 
                 // Pending Count
                 db.getUnsyncedCount().then(count => {
@@ -207,7 +207,7 @@
             
             // Registra Service Worker
             if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('../../../sw.js')
+                navigator.serviceWorker.register('/sw.js')
                     .then(registration => {
                         console.log('Service Worker registered with scope:', registration.scope);
                         checkServiceWorker();

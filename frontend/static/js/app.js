@@ -1,5 +1,5 @@
 // Versão do app - deve corresponder à versão no service worker
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.3.0';
 
 // Função para verificar se o app está sendo executado como PWA instalado
 const isPWA = () => {

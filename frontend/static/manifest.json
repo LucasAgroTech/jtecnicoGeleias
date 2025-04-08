@@ -1,7 +1,7 @@
 {
-  "name": "Formulário de Avaliação Offline",
-  "short_name": "Avaliação",
-  "description": "Aplicativo de coleta de avaliações de 1 a 9",
+  "name": "PBA Geleia",
+  "short_name": "Avaliação Geleias",
+  "description": "Avaliação das geleias do Prêmio CNA Brasil Geleias",
   "start_url": "/?source=pwa",
   "display": "standalone",
   "background_color": "#ffffff",

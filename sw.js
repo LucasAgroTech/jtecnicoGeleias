@@ -1,5 +1,5 @@
 // Service Worker for offline functionality
-const CACHE_NAME = 'rating-form-cache-v7';
+const CACHE_NAME = 'rating-form-cache-v8';
 
 // Versão do app - incrementar quando houver mudanças significativas
 const APP_VERSION = '1.3.0';
@@ -12,15 +12,6 @@ const isProduction = self.location.hostname.includes('herokuapp.com') ||
 const RESOURCES = {
   // Recursos críticos que DEVEM ser cacheados para funcionamento offline básico
   CRITICAL: [
-    './',
-    './index.html',
-    './offline.html',
-    './manifest.json',
-    './static/css/styles.css',
-    './static/js/app.js',
-    './static/js/db.js',
-    './static/js/sync.js',
-    // Versões absolutas para garantir compatibilidade
     '/',
     '/index.html',
     '/offline.html',
@@ -33,12 +24,6 @@ const RESOURCES = {
   
   // Recursos importantes que melhoram a experiência offline
   IMPORTANT: [
-    './sync',
-    './config',
-    './static/images/icon-192.png',
-    './static/images/icon-512.png',
-    './static/images/header.png',
-    // Versões absolutas para garantir compatibilidade
     '/sync',
     '/config',
     '/static/images/icon-192.png',
@@ -48,7 +33,6 @@ const RESOURCES = {
   
   // Recursos adicionais que podem ser cacheados se houver espaço/tempo
   ADDITIONAL: [
-    './noscript.html',
     '/noscript.html'
   ]
 };
