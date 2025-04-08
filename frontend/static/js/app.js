@@ -3,9 +3,27 @@ const APP_VERSION = '1.3.0';
 
 // Função para verificar se o app está sendo executado como PWA instalado
 const isPWA = () => {
-  return window.matchMedia('(display-mode: standalone)').matches || 
-         window.navigator.standalone || 
-         document.referrer.includes('android-app://');
+  // Verifica display-mode
+  const isDisplayStandalone = window.matchMedia('(display-mode: standalone)').matches;
+  
+  // Verifica iOS
+  const isIOSStandalone = window.navigator.standalone === true;
+  
+  // Verifica Android TWA
+  const isAndroidTWA = document.referrer.includes('android-app://');
+  
+  // Verifica se foi lançado a partir da tela inicial (outra forma de detectar)
+  const isFromHomeScreen = window.location.search.includes('source=pwa');
+  
+  // Verifica localStorage (persistência entre sessões)
+  const hasBeenInstalled = localStorage.getItem('pwa_installed') === 'true';
+  
+  // Se for detectado como instalado, armazena essa informação
+  if (isDisplayStandalone || isIOSStandalone || isAndroidTWA || isFromHomeScreen) {
+    localStorage.setItem('pwa_installed', 'true');
+  }
+  
+  return isDisplayStandalone || isIOSStandalone || isAndroidTWA || isFromHomeScreen || hasBeenInstalled;
 };
 
 // Função para mostrar uma mensagem toast
@@ -279,6 +297,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         .then(registration => {
           console.log('Registro do Service Worker concluído com sucesso');
           
+          // Armazena que o service worker foi registrado com sucesso
+          localStorage.setItem('sw_registered', 'true');
+          
+          // Registra a data/hora do registro bem-sucedido
+          localStorage.setItem('sw_registered_at', new Date().toISOString());
+          
           // Verifica se o navegador está offline e já tem um SW ativo
           if (!navigator.onLine && registration && registration.active) {
             console.log('Navegador offline com Service Worker ativo - PWA pronto para uso offline');
@@ -287,6 +311,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         })
         .catch(error => {
           console.error('Falha no processo de registro do Service Worker:', error);
+          localStorage.setItem('sw_registered', 'false');
         });
     } else {
       console.warn('Service Workers não são suportados neste navegador. Funcionalidade offline limitada.');
@@ -517,5 +542,89 @@ document.addEventListener('DOMContentLoaded', async () => {
       } else {
         alert('Você está offline. Conecte-se à Internet para sincronizar.');
       }
+    });
+    
+    // Função para verificar o Service Worker antes da navegação
+    const checkBeforeNavigation = (event) => {
+      // Apenas processa links internos
+      if (event.target.tagName === 'A' && 
+          event.target.href && 
+          event.target.href.startsWith(window.location.origin)) {
+        
+        // Se estiver offline, verifica o Service Worker antes de navegar
+        if (!navigator.onLine) {
+          event.preventDefault();
+          
+          // Verifica se o Service Worker está ativo
+          navigator.serviceWorker.getRegistration().then(registration => {
+            if (registration && registration.active) {
+              // SW ativo, permite a navegação
+              window.location.href = event.target.href;
+            } else {
+              // SW não ativo, mostra mensagem
+              showToast('Você está offline e o aplicativo não está pronto para uso offline. Tente novamente quando estiver online.', 5000, 'error');
+            }
+          }).catch(() => {
+            // Erro ao verificar SW, tenta navegar mesmo assim
+            window.location.href = event.target.href;
+          });
+        }
+      }
+    };
+
+    // Adiciona o listener para verificar antes da navegação
+    document.addEventListener('click', checkBeforeNavigation);
+    
+    // Função para verificar se o PWA está pronto para uso offline
+    const checkOfflineReadiness = async () => {
+      try {
+        // Verifica o Service Worker
+        const swRegistration = await navigator.serviceWorker.getRegistration();
+        const swActive = swRegistration && swRegistration.active;
+        
+        // Verifica o cache
+        const cacheNames = await caches.keys();
+        const hasCache = cacheNames.includes('rating-form-cache-v8');
+        
+        // Verifica IndexedDB
+        const dbAvailable = 'indexedDB' in window;
+        
+        // Status geral
+        const isReady = swActive && hasCache && dbAvailable;
+        
+        // Armazena status
+        localStorage.setItem('offline_ready', isReady ? 'true' : 'false');
+        
+        console.log(`[Offline Readiness] SW: ${swActive ? 'Active' : 'Inactive'}, Cache: ${hasCache ? 'Present' : 'Missing'}, IndexedDB: ${dbAvailable ? 'Available' : 'Unavailable'}`);
+        
+        // Retorna o status
+        return {
+          ready: isReady,
+          serviceWorker: swActive,
+          cache: hasCache,
+          indexedDB: dbAvailable
+        };
+      } catch (error) {
+        console.error('[Offline Readiness] Error checking readiness:', error);
+        localStorage.setItem('offline_ready', 'false');
+        return {
+          ready: false,
+          error: error.message
+        };
+      }
+    };
+
+    // Verificar periodicamente a prontidão offline
+    setInterval(async () => {
+      const status = await checkOfflineReadiness();
+      if (status.ready && !localStorage.getItem('offline_ready_notified')) {
+        showToast('Aplicativo pronto para uso offline completo', 5000, 'info');
+        localStorage.setItem('offline_ready_notified', 'true');
+      }
+    }, 10000);
+
+    // Verificação inicial
+    checkOfflineReadiness().then(readinessStatus => {
+      console.log('Initial offline readiness:', readinessStatus);
     });
   });

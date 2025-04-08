@@ -636,6 +636,62 @@ self.addEventListener('install', event => {
     }
   };
   
+  // Função para garantir que a página inicial seja sempre cacheada
+  const cacheHomePage = async () => {
+    try {
+      const cache = await caches.open(CACHE_NAME);
+      
+      // Lista de possíveis URLs da página principal
+      const homeUrls = [
+        '/',
+        '/index.html',
+        './index.html',
+        './index',
+        './index/'
+      ];
+      
+      // Busca a página inicial
+      const homeResponse = await fetch('/', { cache: 'no-store' });
+      
+      if (homeResponse && homeResponse.status === 200) {
+        // Clone a resposta para cada URL da página inicial
+        for (const url of homeUrls) {
+          await cache.put(url, homeResponse.clone());
+          console.log(`[Service Worker] Cached home page at: ${url}`);
+        }
+        
+        // Adiciona também o offline.html ao cache
+        const offlineResponse = await fetch('/offline.html', { cache: 'no-store' });
+        if (offlineResponse && offlineResponse.status === 200) {
+          await cache.put('/offline.html', offlineResponse.clone());
+          console.log('[Service Worker] Cached offline page');
+        }
+        
+        return true;
+      } else {
+        throw new Error('Failed to fetch home page');
+      }
+    } catch (error) {
+      console.error('[Service Worker] Error caching home page:', error);
+      
+      // Fallback: se não conseguir buscar da rede, cria uma versão básica
+      const cache = await caches.open(CACHE_NAME);
+      const offlineHTML = OFFLINE_HTML;
+      const response = new Response(offlineHTML, {
+        headers: { 'Content-Type': 'text/html' }
+      });
+      
+      // Armazena em todas as variações da URL da página inicial
+      await cache.put('/', response.clone());
+      await cache.put('/index.html', response.clone());
+      await cache.put('./index.html', response.clone());
+      await cache.put('/offline.html', response.clone());
+      
+      console.log('[Service Worker] Created basic offline page as fallback');
+      return false;
+    }
+  };
+
   // Executa o cacheamento em três etapas com prioridades diferentes
   event.waitUntil(
     cacheCriticalResources()
@@ -649,6 +705,9 @@ self.addEventListener('install', event => {
       })
       .then(() => {
         console.log('[Service Worker] All assets cached');
+        return cacheHomePage(); // Adicionado: garantir cache da home page
+      })
+      .then(() => {
         return self.skipWaiting(); // Ativa o service worker imediatamente
       })
   );
@@ -670,19 +729,33 @@ self.addEventListener('activate', event => {
       })
     );
     
-    // Toma controle de todas as páginas imediatamente
+    // Essencial: Toma controle de todas as páginas imediatamente
+    // Isso garante que o SW controle as páginas mesmo no primeiro carregamento
     await self.clients.claim();
     
-    // Notifica todos os clientes que o service worker foi atualizado
+    // Verifica se todos os clientes estão sendo controlados
     const clients = await self.clients.matchAll();
+    let allControlled = true;
+    
     clients.forEach(client => {
+      // Notifica o cliente que o SW foi atualizado
       client.postMessage({
         type: 'SW_ACTIVATED',
         version: APP_VERSION
       });
+      
+      if (!client.controlled) {
+        allControlled = false;
+      }
     });
     
+    // Log para debug
+    console.log(`[Service Worker] Controlling ${clients.length} clients, all controlled: ${allControlled}`);
+    
     console.log('[Service Worker] Activation complete, now controlling all pages');
+    
+    // Retorna uma promessa para garantir que o evento waitUntil espere pela conclusão
+    return Promise.resolve();
   };
   
   event.waitUntil(activationTasks());

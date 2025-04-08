@@ -15,10 +15,22 @@
     <link rel="apple-touch-startup-image" href="/static/images/icon-512.png">
     <!-- Adiciona um script para verificar se o navegador está offline ao carregar -->
     <script>
-        // Se estiver offline ao carregar, redireciona para a página offline
-        if (!navigator.onLine && !window.matchMedia('(display-mode: standalone)').matches) {
-            window.location.href = '/offline.html';
-        }
+        // Só redireciona para offline.html se estiver offline E o service worker não estiver ativo
+        (async function() {
+            if (!navigator.onLine) {
+                try {
+                    // Verifica se o Service Worker está ativo
+                    const registration = await navigator.serviceWorker.ready;
+                    if (!registration || !registration.active) {
+                        window.location.href = '/offline.html';
+                    }
+                    // Se o SW estiver ativo, permite carregar a página normalmente
+                } catch (e) {
+                    // Se não conseguir verificar o SW, redireciona
+                    window.location.href = '/offline.html';
+                }
+            }
+        })();
     </script>
 </head>
 <body>
