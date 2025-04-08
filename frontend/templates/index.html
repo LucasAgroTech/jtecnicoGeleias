@@ -7,8 +7,24 @@
     <link rel="stylesheet" href="/static/css/styles.css">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#3498db">
+    <meta name="description" content="Aplicativo de avaliação de geleias do Prêmio CNA Brasil Artesanal">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="/static/images/icon-192.png">
+    <!-- Fallback para quando offline -->
+    <link rel="apple-touch-startup-image" href="/static/images/icon-512.png">
+    <!-- Adiciona um script para verificar se o navegador está offline ao carregar -->
+    <script>
+        // Se estiver offline ao carregar, redireciona para a página offline
+        if (!navigator.onLine && !window.matchMedia('(display-mode: standalone)').matches) {
+            window.location.href = '/offline.html';
+        }
+    </script>
 </head>
 <body>
+    <noscript>
+        <meta http-equiv="refresh" content="0;url=/noscript.html">
+    </noscript>
     <div class="container">
         <header>
             <h1>Prêmio CNA Brasil Artesanal - Geleia</h1>

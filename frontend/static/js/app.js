@@ -1,5 +1,5 @@
 // Versão do app - deve corresponder à versão no service worker
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.2.0';
 
 // Função para verificar se o app está sendo executado como PWA instalado
 const isPWA = () => {
@@ -172,44 +172,53 @@ document.addEventListener('DOMContentLoaded', async () => {
       'CNA-6645'
     ];
     
-    // Registra Service Worker com múltiplas tentativas de caminhos
+    // Registra Service Worker com abordagem simplificada e robusta
     if ('serviceWorker' in navigator) {
-      // Lista de possíveis caminhos para o service worker
-      const swPaths = [
-        '/sw.js',                // Caminho absoluto da raiz
-        './sw.js',               // Caminho relativo
-        '../sw.js',              // Um nível acima
-        '../../sw.js',           // Dois níveis acima
-        '../../../sw.js',        // Três níveis acima
-        window.location.pathname + 'sw.js' // Baseado no caminho atual
-      ];
+      // Detecta se estamos em produção (Heroku) ou desenvolvimento
+      const isProduction = window.location.hostname.includes('herokuapp.com') || 
+                          !window.location.hostname.includes('localhost');
       
-      // Função para tentar registrar com diferentes caminhos
-      const tryRegisterSW = async (paths, index = 0) => {
-        if (index >= paths.length) {
-          console.error('Falha em todas as tentativas de registro do Service Worker');
-          return;
-        }
-        
+      console.log('Ambiente de execução:', isProduction ? 'Produção' : 'Desenvolvimento');
+      
+      // Determina o caminho do Service Worker com base no ambiente
+      const swPath = isProduction ? '/sw.js' : './sw.js';
+      
+      // Registra o Service Worker com tratamento de erros aprimorado
+      const registerServiceWorker = async () => {
         try {
-          const registration = await navigator.serviceWorker.register(paths[index], {
+          console.log(`Tentando registrar Service Worker em: ${swPath}`);
+          
+          const registration = await navigator.serviceWorker.register(swPath, {
             updateViaCache: 'none', // Não usar cache para atualizações do SW
             scope: '/' // Garante que o escopo seja a raiz do site
           });
-          console.log('Service Worker registrado com sucesso usando:', paths[index]);
+          
+          console.log('Service Worker registrado com sucesso!');
           console.log('Scope:', registration.scope);
           
           // Força a atualização do service worker
-          registration.update();
+          try {
+            await registration.update();
+            console.log('Service Worker atualizado');
+          } catch (updateError) {
+            console.warn('Erro ao atualizar Service Worker:', updateError);
+          }
           
-          // Verifica se o service worker está ativo
+          // Verifica o estado atual do Service Worker
           if (registration.active) {
             console.log('Service Worker já está ativo');
-          } else {
-            console.log('Aguardando ativação do Service Worker...');
             
-            // Adiciona um listener para detectar quando o SW estiver ativo
+            // Se estiver offline, notifica que o app está pronto para uso offline
+            if (!navigator.onLine) {
+              showToast('Aplicativo pronto para uso offline', 5000, 'offline');
+            }
+          } else if (registration.installing) {
+            console.log('Service Worker está sendo instalado');
+            
+            // Monitora o processo de instalação
             registration.installing.addEventListener('statechange', (event) => {
+              console.log('Service Worker mudou de estado para:', event.target.state);
+              
               if (event.target.state === 'activated') {
                 console.log('Service Worker ativado e controlando a página');
                 
@@ -219,41 +228,65 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
               }
             });
+          } else if (registration.waiting) {
+            console.log('Service Worker está aguardando ativação');
           }
+          
+          // Configura listener para atualizações futuras
+          registration.addEventListener('updatefound', () => {
+            console.log('Nova versão do Service Worker encontrada!');
+            
+            const newWorker = registration.installing;
+            if (newWorker) {
+              newWorker.addEventListener('statechange', () => {
+                console.log('Novo Service Worker mudou para estado:', newWorker.state);
+                
+                if (newWorker.state === 'activated') {
+                  console.log('Nova versão do Service Worker ativada');
+                  showToast('Aplicativo atualizado! Agora funciona melhor offline.', 5000);
+                }
+              });
+            }
+          });
           
           return registration;
         } catch (error) {
-          console.warn(`Falha ao registrar SW com ${paths[index]}:`, error);
-          return tryRegisterSW(paths, index + 1);
+          console.error('Erro ao registrar Service Worker:', error);
+          
+          // Tenta um caminho alternativo se o primeiro falhar
+          if (swPath === '/sw.js') {
+            try {
+              console.log('Tentando caminho alternativo para o Service Worker: ./sw.js');
+              const altRegistration = await navigator.serviceWorker.register('./sw.js', {
+                scope: '/'
+              });
+              console.log('Service Worker registrado com caminho alternativo');
+              return altRegistration;
+            } catch (altError) {
+              console.error('Falha também no caminho alternativo:', altError);
+              showToast('Erro ao configurar modo offline. Algumas funcionalidades podem não estar disponíveis.', 5000, 'error');
+              throw altError;
+            }
+          } else {
+            showToast('Erro ao configurar modo offline. Algumas funcionalidades podem não estar disponíveis.', 5000, 'error');
+            throw error;
+          }
         }
       };
       
-      // Inicia o processo de registro
-      tryRegisterSW(swPaths)
+      // Executa o registro do Service Worker
+      registerServiceWorker()
         .then(registration => {
-          if (registration) {
-            // Verifica se há atualizações pendentes
-            registration.addEventListener('updatefound', () => {
-              console.log('Nova versão do Service Worker encontrada!');
-              
-              // Adiciona um listener para detectar quando o novo SW estiver ativo
-              const newWorker = registration.installing;
-              if (newWorker) {
-                newWorker.addEventListener('statechange', () => {
-                  if (newWorker.state === 'activated') {
-                    console.log('Nova versão do Service Worker ativada');
-                    showToast('Aplicativo atualizado! Agora funciona melhor offline.', 5000);
-                  }
-                });
-              }
-            });
-            
-            // Verifica se o navegador está offline e já tem um SW ativo
-            if (!navigator.onLine && registration.active) {
-              console.log('Navegador offline com Service Worker ativo - PWA pronto para uso offline');
-              showToast('Aplicativo pronto para uso offline', 5000, 'offline');
-            }
+          console.log('Registro do Service Worker concluído com sucesso');
+          
+          // Verifica se o navegador está offline e já tem um SW ativo
+          if (!navigator.onLine && registration && registration.active) {
+            console.log('Navegador offline com Service Worker ativo - PWA pronto para uso offline');
+            showToast('Aplicativo pronto para uso offline', 5000, 'offline');
           }
+        })
+        .catch(error => {
+          console.error('Falha no processo de registro do Service Worker:', error);
         });
     } else {
       console.warn('Service Workers não são suportados neste navegador. Funcionalidade offline limitada.');

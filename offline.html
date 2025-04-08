@@ -145,7 +145,16 @@
         
         // Verifica a conexão quando a página carrega
         document.addEventListener('DOMContentLoaded', () => {
-            checkConnection();
+            // Tenta navegar diretamente para o formulário se estiver instalado como PWA
+            if (window.matchMedia('(display-mode: standalone)').matches || 
+                window.navigator.standalone || 
+                document.referrer.includes('android-app://')) {
+                console.log('Executando como PWA, tentando abrir o formulário diretamente');
+                // Tenta abrir o formulário diretamente
+                window.location.href = '/';
+            } else {
+                checkConnection();
+            }
         });
         
         // Verifica periodicamente se a conexão foi restabelecida

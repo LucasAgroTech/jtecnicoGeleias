@@ -1,39 +1,41 @@
 {
-    "name": "Formulário de Avaliação Offline",
-    "short_name": "Avaliação",
-    "description": "Aplicativo de coleta de avaliações de 1 a 9",
-    "start_url": "/",
-    "display": "standalone",
-    "background_color": "#ffffff",
-    "theme_color": "#3498db",
-    "icons": [
-      {
-        "src": "/static/images/icon-192.png",
-        "sizes": "192x192",
-        "type": "image/png",
-        "purpose": "any maskable"
-      },
-      {
-        "src": "/static/images/icon-512.png",
-        "sizes": "512x512",
-        "type": "image/png",
-        "purpose": "any maskable"
-      }
-    ],
-    "orientation": "portrait",
-    "scope": "/",
-    "lang": "pt-BR",
-    "prefer_related_applications": false,
-    "categories": ["utilities", "productivity"],
-    "shortcuts": [
-      {
-        "name": "Formulário",
-        "url": "/"
-      },
-      {
-        "name": "Sincronização",
-        "url": "/sync"
-      }
-    ],
-    "offline_enabled": true
-  }
+  "name": "Formulário de Avaliação Offline",
+  "short_name": "Avaliação",
+  "description": "Aplicativo de coleta de avaliações de 1 a 9",
+  "start_url": "/?source=pwa",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#3498db",
+  "id": "/",
+  "dir": "ltr",
+  "icons": [
+    {
+      "src": "/static/images/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/images/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "orientation": "portrait",
+  "scope": "/",
+  "lang": "pt-BR",
+  "prefer_related_applications": false,
+  "categories": ["utilities", "productivity"],
+  "shortcuts": [
+    {
+      "name": "Formulário",
+      "url": "/"
+    },
+    {
+      "name": "Sincronização",
+      "url": "/sync"
+    }
+  ],
+  "offline_enabled": true
+}

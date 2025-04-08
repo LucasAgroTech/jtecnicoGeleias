@@ -1,11 +1,24 @@
 // Service Worker for offline functionality
-const CACHE_NAME = 'rating-form-cache-v5';
+const CACHE_NAME = 'rating-form-cache-v6';
 
 // Versão do app - incrementar quando houver mudanças significativas
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.2.0';
+
+// Detecta se estamos em produção (Heroku) ou desenvolvimento
+const isProduction = self.location.hostname.includes('herokuapp.com') || 
+                    !self.location.hostname.includes('localhost');
 
 // Lista de recursos essenciais que devem ser cacheados imediatamente
 const CORE_ASSETS = [
+  './',
+  './index.html',
+  './offline.html',
+  './manifest.json',
+  './static/css/styles.css',
+  './static/js/app.js',
+  './static/js/db.js',
+  './static/js/sync.js',
+  // Versões absolutas para garantir compatibilidade
   '/',
   '/index.html',
   '/offline.html',
@@ -19,6 +32,12 @@ const CORE_ASSETS = [
 // Lista completa de recursos para cachear
 const ASSETS_TO_CACHE = [
   ...CORE_ASSETS,
+  './sync',
+  './config',
+  './static/images/icon-192.png',
+  './static/images/icon-512.png',
+  './static/images/header.png',
+  // Versões absolutas para garantir compatibilidade
   '/sync',
   '/config',
   '/static/images/icon-192.png',
@@ -28,13 +47,17 @@ const ASSETS_TO_CACHE = [
 
 // Versões alternativas dos caminhos para lidar com diferentes ambientes
 const ALTERNATIVE_PATHS = {
-  '/': ['index.html', './index.html', '../index.html'],
-  '/manifest.json': ['./manifest.json', '../manifest.json', '../static/manifest.json'],
-  '/sw.js': ['./sw.js', '../sw.js'],
+  '/': ['index.html', './index.html', '../index.html', './', '../'],
+  '/index.html': ['./index.html', '../index.html', 'index.html'],
+  '/manifest.json': ['./manifest.json', '../manifest.json', '../static/manifest.json', 'manifest.json'],
+  '/sw.js': ['./sw.js', '../sw.js', 'sw.js'],
   '/static/css/styles.css': ['./static/css/styles.css', '../static/css/styles.css', 'static/css/styles.css'],
   '/static/js/app.js': ['./static/js/app.js', '../static/js/app.js', 'static/js/app.js'],
   '/static/js/db.js': ['./static/js/db.js', '../static/js/db.js', 'static/js/db.js'],
-  '/static/js/sync.js': ['./static/js/sync.js', '../static/js/sync.js', 'static/js/sync.js']
+  '/static/js/sync.js': ['./static/js/sync.js', '../static/js/sync.js', 'static/js/sync.js'],
+  '/static/images/icon-192.png': ['./static/images/icon-192.png', '../static/images/icon-192.png', 'static/images/icon-192.png'],
+  '/static/images/icon-512.png': ['./static/images/icon-512.png', '../static/images/icon-512.png', 'static/images/icon-512.png'],
+  '/static/images/header.png': ['./static/images/header.png', '../static/images/header.png', 'static/images/header.png']
 };
 
 // Página HTML para mostrar quando estiver offline (versão inline como fallback)
@@ -333,11 +356,32 @@ self.addEventListener('install', event => {
         let response;
         
         try {
-          response = await fetch(request);
+          response = await fetch(request, { cache: 'no-store' });
         } catch (error) {
+          console.log(`[Service Worker] Fetch failed for ${asset}, trying alternatives: ${error.message}`);
           // Se falhar, tenta caminhos alternativos
           const alternatives = ALTERNATIVE_PATHS[asset] || [];
-          response = await fetchWithAlternatives(request, alternatives);
+          try {
+            response = await fetchWithAlternatives(request, alternatives);
+          } catch (altError) {
+            console.warn(`[Service Worker] All alternatives failed for ${asset}: ${altError.message}`);
+            
+            // Se estamos em produção, cria uma resposta vazia em vez de falhar
+            if (isProduction) {
+              if (asset.includes('.css')) {
+                return cache.put(asset, new Response('/* Fallback CSS */', {
+                  headers: { 'Content-Type': 'text/css' }
+                }));
+              } else if (asset.includes('.js')) {
+                return cache.put(asset, new Response('// Fallback JS', {
+                  headers: { 'Content-Type': 'application/javascript' }
+                }));
+              } else if (asset === '/' || asset === '/index.html' || asset === './index.html' || asset === './') {
+                return cache.put(asset, createOfflineResponse());
+              }
+            }
+            return false;
+          }
         }
         
         if (response && response.status === 200) {
@@ -472,7 +516,7 @@ const getPathKey = (url) => {
 // Função para verificar se uma URL é a página inicial
 const isHomePage = (url) => {
   const path = new URL(url).pathname;
-  return path === '/' || path === '/index.html';
+  return path === '/' || path === '/index.html' || path === '' || path.endsWith('/index.html');
 };
 
 // Fetch event - serve from cache or network with improved error handling
@@ -487,8 +531,28 @@ self.addEventListener('fetch', event => {
     event.respondWith(
       (async () => {
         try {
+          console.log(`[Service Worker] Handling home page request: ${event.request.url}`);
+          
           // Primeiro tenta encontrar no cache
-          const cachedResponse = await caches.match(event.request);
+          let cachedResponse = await caches.match(event.request);
+          
+          // Se não encontrar com o URL exato, tenta URLs alternativos
+          if (!cachedResponse) {
+            console.log('[Service Worker] Home page not found in cache with exact URL, trying alternatives');
+            
+            // Lista de possíveis caminhos para a página inicial
+            const homePaths = ['/', '/index.html', './index.html', './'];
+            
+            // Tenta cada caminho alternativo
+            for (const path of homePaths) {
+              cachedResponse = await caches.match(path);
+              if (cachedResponse) {
+                console.log(`[Service Worker] Found home page in cache at: ${path}`);
+                break;
+              }
+            }
+          }
+          
           if (cachedResponse) {
             console.log(`[Service Worker] Serving home page from cache`);
             
@@ -514,14 +578,16 @@ self.addEventListener('fetch', event => {
           // Se não estiver no cache, tenta buscar da rede apenas se estiver online
           if (navigator.onLine) {
             try {
+              console.log('[Service Worker] Home page not in cache, fetching from network');
               const networkResponse = await fetch(event.request);
               if (networkResponse && networkResponse.status === 200) {
                 const cache = await caches.open(CACHE_NAME);
                 await cache.put(event.request, networkResponse.clone());
+                console.log('[Service Worker] Cached home page from network');
                 return networkResponse;
               }
             } catch (error) {
-              console.log('[Service Worker] Failed to fetch home page from network');
+              console.log('[Service Worker] Failed to fetch home page from network:', error.message);
             }
           }
           
@@ -530,13 +596,17 @@ self.addEventListener('fetch', event => {
           
           // Tenta encontrar qualquer versão cacheada da home page
           const cachedHome = await caches.match('/') || 
-                             await caches.match('/index.html');
+                             await caches.match('/index.html') ||
+                             await caches.match('./index.html') ||
+                             await caches.match('./');
           
           if (cachedHome) {
+            console.log('[Service Worker] Found cached home page alternative');
             return cachedHome;
           }
           
           // Se não encontrar nenhuma versão cacheada, cria uma resposta offline
+          console.log('[Service Worker] No cached home page found, creating offline response');
           return createOfflineResponse();
         } catch (error) {
           console.error('[Service Worker] Error serving home page:', error);
