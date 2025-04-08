@@ -1,48 +1,63 @@
 // Service Worker for offline functionality
-const CACHE_NAME = 'rating-form-cache-v6';
+const CACHE_NAME = 'rating-form-cache-v7';
 
 // Versão do app - incrementar quando houver mudanças significativas
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.3.0';
 
 // Detecta se estamos em produção (Heroku) ou desenvolvimento
 const isProduction = self.location.hostname.includes('herokuapp.com') || 
                     !self.location.hostname.includes('localhost');
 
-// Lista de recursos essenciais que devem ser cacheados imediatamente
-const CORE_ASSETS = [
-  './',
-  './index.html',
-  './offline.html',
-  './manifest.json',
-  './static/css/styles.css',
-  './static/js/app.js',
-  './static/js/db.js',
-  './static/js/sync.js',
-  // Versões absolutas para garantir compatibilidade
-  '/',
-  '/index.html',
-  '/offline.html',
-  '/manifest.json',
-  '/static/css/styles.css',
-  '/static/js/app.js',
-  '/static/js/db.js',
-  '/static/js/sync.js'
-];
+// Categorização de recursos por prioridade e estratégia de cache
+const RESOURCES = {
+  // Recursos críticos que DEVEM ser cacheados para funcionamento offline básico
+  CRITICAL: [
+    './',
+    './index.html',
+    './offline.html',
+    './manifest.json',
+    './static/css/styles.css',
+    './static/js/app.js',
+    './static/js/db.js',
+    './static/js/sync.js',
+    // Versões absolutas para garantir compatibilidade
+    '/',
+    '/index.html',
+    '/offline.html',
+    '/manifest.json',
+    '/static/css/styles.css',
+    '/static/js/app.js',
+    '/static/js/db.js',
+    '/static/js/sync.js'
+  ],
+  
+  // Recursos importantes que melhoram a experiência offline
+  IMPORTANT: [
+    './sync',
+    './config',
+    './static/images/icon-192.png',
+    './static/images/icon-512.png',
+    './static/images/header.png',
+    // Versões absolutas para garantir compatibilidade
+    '/sync',
+    '/config',
+    '/static/images/icon-192.png',
+    '/static/images/icon-512.png',
+    '/static/images/header.png'
+  ],
+  
+  // Recursos adicionais que podem ser cacheados se houver espaço/tempo
+  ADDITIONAL: [
+    './noscript.html',
+    '/noscript.html'
+  ]
+};
 
 // Lista completa de recursos para cachear
 const ASSETS_TO_CACHE = [
-  ...CORE_ASSETS,
-  './sync',
-  './config',
-  './static/images/icon-192.png',
-  './static/images/icon-512.png',
-  './static/images/header.png',
-  // Versões absolutas para garantir compatibilidade
-  '/sync',
-  '/config',
-  '/static/images/icon-192.png',
-  '/static/images/icon-512.png',
-  '/static/images/header.png'
+  ...RESOURCES.CRITICAL,
+  ...RESOURCES.IMPORTANT,
+  ...RESOURCES.ADDITIONAL
 ];
 
 // Versões alternativas dos caminhos para lidar com diferentes ambientes
@@ -236,22 +251,33 @@ const OFFLINE_HTML = `
 </html>
 `;
 
-// Maximum number of sync attempts per item
-const MAX_SYNC_ATTEMPTS = 5;
+// Configurações de sincronização
+const SYNC_CONFIG = {
+  MAX_ATTEMPTS: 5,
+  INITIAL_BACKOFF: 30000, // 30 segundos
+  MAX_BACKOFF: 8 * 60 * 1000, // 8 minutos
+  JITTER: 0.2 // 20% de variação aleatória para evitar thundering herd
+};
 
-// Backoff time in milliseconds (starts at 30 seconds)
-const INITIAL_BACKOFF = 30000;
+// Configurações de estratégias de cache por tipo de recurso
+const CACHE_STRATEGIES = {
+  HTML: 'cache-first-update-background', // Cache primeiro, atualiza em segundo plano
+  CSS_JS: 'stale-while-revalidate',      // Usa cache enquanto atualiza
+  IMAGES: 'cache-first',                 // Sempre do cache se disponível
+  API: 'network-first',                  // Tenta rede primeiro, fallback para cache
+  DEFAULT: 'cache-first'                 // Estratégia padrão
+};
 
-// Função para tentar buscar um recurso com caminhos alternativos
-const fetchWithAlternatives = async (request, alternatives) => {
+// Função para tentar buscar um recurso com caminhos alternativos e retry
+const fetchWithAlternatives = async (request, alternatives, retryCount = 1) => {
   // Primeiro tenta o caminho original
   try {
-    const response = await fetch(request);
+    const response = await fetch(request, { cache: 'no-store' });
     if (response && response.status === 200) {
       return response;
     }
   } catch (error) {
-    console.log(`Falha ao buscar ${request.url}, tentando alternativas`);
+    console.log(`[Service Worker] Falha ao buscar ${request.url}, tentando alternativas`);
   }
   
   // Se falhar, tenta os caminhos alternativos
@@ -262,19 +288,47 @@ const fetchWithAlternatives = async (request, alternatives) => {
     for (const altPath of alternatives) {
       try {
         const altUrl = new URL(altPath, baseUrl);
-        console.log(`Tentando caminho alternativo: ${altUrl.href}`);
-        const response = await fetch(altUrl.href);
+        console.log(`[Service Worker] Tentando caminho alternativo: ${altUrl.href}`);
+        const response = await fetch(altUrl.href, { cache: 'no-store' });
         if (response && response.status === 200) {
           return response;
         }
       } catch (error) {
-        console.log(`Falha ao buscar caminho alternativo ${altPath}`);
+        console.log(`[Service Worker] Falha ao buscar caminho alternativo ${altPath}`);
       }
     }
   }
   
+  // Implementa retry com backoff exponencial para falhas temporárias
+  if (retryCount < 3) { // Máximo de 3 tentativas
+    const backoffTime = Math.min(1000 * Math.pow(2, retryCount - 1), 5000);
+    console.log(`[Service Worker] Tentativa ${retryCount} falhou, tentando novamente em ${backoffTime}ms`);
+    
+    await new Promise(resolve => setTimeout(resolve, backoffTime));
+    return fetchWithAlternatives(request, alternatives, retryCount + 1);
+  }
+  
   // Se todas as tentativas falharem, lança um erro
-  throw new Error(`Não foi possível buscar ${request.url} nem suas alternativas`);
+  throw new Error(`[Service Worker] Não foi possível buscar ${request.url} nem suas alternativas após ${retryCount} tentativas`);
+};
+
+// Função para determinar a estratégia de cache com base no tipo de recurso
+const getResourceType = (url) => {
+  const path = new URL(url).pathname;
+  
+  if (path.endsWith('.html') || path === '/' || path.endsWith('/')) {
+    return 'HTML';
+  } else if (path.endsWith('.css')) {
+    return 'CSS_JS';
+  } else if (path.endsWith('.js')) {
+    return 'CSS_JS';
+  } else if (path.endsWith('.png') || path.endsWith('.jpg') || path.endsWith('.jpeg') || path.endsWith('.gif') || path.endsWith('.webp') || path.endsWith('.svg')) {
+    return 'IMAGES';
+  } else if (path.includes('/api/')) {
+    return 'API';
+  }
+  
+  return 'DEFAULT';
 };
 
 // Função para criar respostas offline para recursos essenciais
@@ -285,29 +339,126 @@ const createOfflineAssets = async () => {
   await cache.put('/offline.html', createOfflineResponse());
   
   // Cria uma resposta vazia para CSS e JS que não puderam ser cacheados
-  const emptyCSS = new Response('/* Fallback CSS */', {
-    headers: { 'Content-Type': 'text/css' }
+  const emptyCSS = new Response('/* Fallback CSS - Gerado pelo Service Worker */\n' +
+    'body { font-family: sans-serif; margin: 0; padding: 20px; background-color: #f9f9f9; }\n' +
+    '.offline-notice { background-color: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; padding: 10px; border-radius: 4px; margin-bottom: 15px; }\n' +
+    'button { background-color: #007bff; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }\n' +
+    'button:hover { background-color: #0069d9; }', {
+    headers: { 
+      'Content-Type': 'text/css',
+      'Cache-Control': 'no-cache'
+    }
   });
   
-  const emptyJS = new Response('// Fallback JS', {
-    headers: { 'Content-Type': 'application/javascript' }
+  const emptyJS = new Response('// Fallback JS - Gerado pelo Service Worker\n' +
+    'console.log("[Offline Mode] Usando versão offline do JavaScript");\n' +
+    'function checkOnlineStatus() {\n' +
+    '  const statusEl = document.getElementById("connection-status");\n' +
+    '  if (statusEl) {\n' +
+    '    statusEl.textContent = navigator.onLine ? "Online" : "Offline";\n' +
+    '    statusEl.className = navigator.onLine ? "" : "offline";\n' +
+    '  }\n' +
+    '}\n' +
+    'window.addEventListener("online", () => {\n' +
+    '  checkOnlineStatus();\n' +
+    '  alert("Você está online novamente! Recarregue a página para usar a versão completa.");\n' +
+    '});\n' +
+    'window.addEventListener("DOMContentLoaded", checkOnlineStatus);\n', {
+    headers: { 
+      'Content-Type': 'application/javascript',
+      'Cache-Control': 'no-cache'
+    }
   });
   
   // Adiciona fallbacks para recursos críticos
   await cache.put(new Request('/static/css/styles.css'), emptyCSS.clone());
   await cache.put(new Request('/static/js/app.js'), emptyJS.clone());
-  await cache.put(new Request('/static/js/db.js'), emptyJS.clone());
-  await cache.put(new Request('/static/js/sync.js'), emptyJS.clone());
+  await cache.put(new Request('/static/js/db.js'), new Response('// DB Fallback\nclass LocalDatabase { constructor() { console.log("[Offline] DB Fallback"); } }', {
+    headers: { 'Content-Type': 'application/javascript' }
+  }));
+  await cache.put(new Request('/static/js/sync.js'), new Response('// Sync Fallback\nclass SyncManager { constructor() { console.log("[Offline] Sync Fallback"); } }', {
+    headers: { 'Content-Type': 'application/javascript' }
+  }));
+  
+  // Cria fallbacks para imagens críticas
+  const svgPixel = 'data:image/svg+xml;charset=utf-8,' + 
+    encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>');
+  
+  const imageFallback = await fetch(svgPixel).then(r => r.blob()).then(blob => 
+    new Response(blob, { 
+      headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'no-cache' } 
+    })
+  );
+  
+  await cache.put(new Request('/static/images/icon-192.png'), imageFallback.clone());
+  await cache.put(new Request('/static/images/icon-512.png'), imageFallback.clone());
   
   console.log('[Service Worker] Offline fallbacks created');
 };
 
-// Função para pré-cachear a página inicial
+// Função para pré-cachear a página inicial com versão offline aprimorada
 const precacheHomePage = async () => {
   try {
     const cache = await caches.open(CACHE_NAME);
     
-    // Cria uma versão offline da página inicial
+    // Tenta buscar a página inicial real primeiro
+    try {
+      const homePageResponse = await fetch('/', { cache: 'no-store' });
+      if (homePageResponse && homePageResponse.status === 200) {
+        const homePageText = await homePageResponse.text();
+        
+        // Modifica a página para funcionar melhor offline
+        let modifiedHomePage = homePageText
+          // Adiciona indicador de modo offline
+          .replace('<body>', '<body class="offline-mode">')
+          // Adiciona banner de modo offline no topo
+          .replace('<div class="container">', 
+            '<div class="container">' +
+            '<div class="offline-notice" id="offline-banner" style="display: none;">' +
+            '  <strong>Modo Offline</strong> - Você está usando a versão offline do aplicativo. ' +
+            '  Suas avaliações serão salvas localmente e sincronizadas quando você estiver online novamente.' +
+            '</div>');
+        
+        // Adiciona script para detectar status offline
+        modifiedHomePage = modifiedHomePage.replace('</body>', 
+          '<script>' +
+          '  function updateOfflineBanner() {' +
+          '    const banner = document.getElementById("offline-banner");' +
+          '    if (banner) {' +
+          '      banner.style.display = navigator.onLine ? "none" : "block";' +
+          '    }' +
+          '  }' +
+          '  window.addEventListener("online", updateOfflineBanner);' +
+          '  window.addEventListener("offline", updateOfflineBanner);' +
+          '  document.addEventListener("DOMContentLoaded", updateOfflineBanner);' +
+          '  // Verifica imediatamente' +
+          '  if (!navigator.onLine) {' +
+          '    document.documentElement.classList.add("offline");' +
+          '  }' +
+          '</script>' +
+          '</body>');
+        
+        // Cria resposta com a página modificada
+        const modifiedResponse = new Response(modifiedHomePage, {
+          headers: {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'no-cache',
+            'X-Offline-Modified': 'true'
+          }
+        });
+        
+        // Cacheia a versão modificada da página inicial
+        await cache.put('/', modifiedResponse.clone());
+        await cache.put('/index.html', modifiedResponse.clone());
+        
+        console.log('[Service Worker] Modified home page cached successfully');
+        return true;
+      }
+    } catch (fetchError) {
+      console.warn('[Service Worker] Could not fetch real home page:', fetchError);
+    }
+    
+    // Se não conseguir buscar a página real, cria uma versão offline básica
     const offlineHomeHTML = OFFLINE_HTML.replace(
       '<div class="status">Offline</div>',
       '<div class="status">Modo Offline</div>'
@@ -319,7 +470,8 @@ const precacheHomePage = async () => {
     const offlineHomeResponse = new Response(offlineHomeHTML, {
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
-        'Cache-Control': 'no-cache'
+        'Cache-Control': 'no-cache',
+        'X-Offline-Fallback': 'true'
       }
     });
     
@@ -327,7 +479,7 @@ const precacheHomePage = async () => {
     await cache.put('/', offlineHomeResponse.clone());
     await cache.put('/index.html', offlineHomeResponse.clone());
     
-    console.log('[Service Worker] Offline home page cached');
+    console.log('[Service Worker] Basic offline home page cached as fallback');
     return true;
   } catch (error) {
     console.error('[Service Worker] Failed to cache offline home page:', error);
@@ -335,65 +487,113 @@ const precacheHomePage = async () => {
   }
 };
 
-// Install event - cache assets with improved error handling
+// Função para verificar a integridade de um recurso cacheado
+const verifyResourceIntegrity = async (cache, url) => {
+  try {
+    const cachedResponse = await cache.match(url);
+    
+    if (!cachedResponse) {
+      return false;
+    }
+    
+    // Verifica se a resposta tem conteúdo válido
+    const clone = cachedResponse.clone();
+    const contentType = clone.headers.get('Content-Type') || '';
+    
+    if (contentType.includes('text/html') || contentType.includes('application/javascript') || contentType.includes('text/css')) {
+      const text = await clone.text();
+      return text.length > 0;
+    } else if (contentType.includes('image/')) {
+      const blob = await clone.blob();
+      return blob.size > 0;
+    }
+    
+    return true;
+  } catch (error) {
+    console.error(`[Service Worker] Error verifying integrity of ${url}:`, error);
+    return false;
+  }
+};
+
+// Install event - cache assets with improved error handling and integrity verification
 self.addEventListener('install', event => {
   console.log('[Service Worker] Installing version:', APP_VERSION);
   
-  // Primeiro cacheia os recursos essenciais
-  const cacheEssentials = async () => {
+  // Primeiro cacheia os recursos críticos
+  const cacheCriticalResources = async () => {
     const cache = await caches.open(CACHE_NAME);
-    console.log('[Service Worker] Caching core assets');
+    console.log('[Service Worker] Caching critical assets');
     
-    // Cria recursos offline primeiro
+    // Cria recursos offline primeiro para garantir fallbacks
     await createOfflineAssets();
     await precacheHomePage();
     
-    // Cacheia cada recurso essencial individualmente para melhor tratamento de erros
-    const cachePromises = CORE_ASSETS.map(async (asset) => {
+    // Cacheia cada recurso crítico individualmente com tratamento de erros robusto
+    const cachePromises = RESOURCES.CRITICAL.map(async (asset) => {
       try {
         // Tenta o caminho original primeiro
         const request = new Request(asset);
         let response;
         
         try {
-          response = await fetch(request, { cache: 'no-store' });
+          response = await fetch(request, { 
+            cache: 'no-store',
+            credentials: 'same-origin'
+          });
         } catch (error) {
-          console.log(`[Service Worker] Fetch failed for ${asset}, trying alternatives: ${error.message}`);
+          console.log(`[Service Worker] Fetch failed for critical asset ${asset}, trying alternatives: ${error.message}`);
           // Se falhar, tenta caminhos alternativos
           const alternatives = ALTERNATIVE_PATHS[asset] || [];
           try {
             response = await fetchWithAlternatives(request, alternatives);
           } catch (altError) {
-            console.warn(`[Service Worker] All alternatives failed for ${asset}: ${altError.message}`);
+            console.warn(`[Service Worker] All alternatives failed for critical asset ${asset}: ${altError.message}`);
             
-            // Se estamos em produção, cria uma resposta vazia em vez de falhar
-            if (isProduction) {
-              if (asset.includes('.css')) {
-                return cache.put(asset, new Response('/* Fallback CSS */', {
-                  headers: { 'Content-Type': 'text/css' }
-                }));
-              } else if (asset.includes('.js')) {
-                return cache.put(asset, new Response('// Fallback JS', {
-                  headers: { 'Content-Type': 'application/javascript' }
-                }));
-              } else if (asset === '/' || asset === '/index.html' || asset === './index.html' || asset === './') {
-                return cache.put(asset, createOfflineResponse());
-              }
+            // Cria uma resposta fallback em vez de falhar
+            if (asset.includes('.css')) {
+              return cache.put(asset, new Response('/* Fallback CSS - Critical Resource */', {
+                headers: { 'Content-Type': 'text/css', 'X-Offline-Fallback': 'true' }
+              }));
+            } else if (asset.includes('.js')) {
+              return cache.put(asset, new Response('// Fallback JS - Critical Resource', {
+                headers: { 'Content-Type': 'application/javascript', 'X-Offline-Fallback': 'true' }
+              }));
+            } else if (asset === '/' || asset === '/index.html' || asset === './index.html' || asset === './') {
+              return cache.put(asset, createOfflineResponse());
             }
             return false;
           }
         }
         
         if (response && response.status === 200) {
-          await cache.put(asset, response);
-          console.log(`[Service Worker] Cached: ${asset}`);
+          // Clona a resposta antes de cachear
+          const responseToCache = response.clone();
+          await cache.put(asset, responseToCache);
+          
+          // Verifica a integridade do recurso cacheado
+          const isValid = await verifyResourceIntegrity(cache, asset);
+          if (!isValid) {
+            console.warn(`[Service Worker] Integrity check failed for ${asset}, using fallback`);
+            // Se a verificação falhar, usa fallback
+            if (asset.includes('.css')) {
+              await cache.put(asset, new Response('/* Fallback CSS - Integrity Failed */', {
+                headers: { 'Content-Type': 'text/css', 'X-Offline-Fallback': 'true' }
+              }));
+            } else if (asset.includes('.js')) {
+              await cache.put(asset, new Response('// Fallback JS - Integrity Failed', {
+                headers: { 'Content-Type': 'application/javascript', 'X-Offline-Fallback': 'true' }
+              }));
+            }
+          } else {
+            console.log(`[Service Worker] Cached critical asset: ${asset}`);
+          }
           return true;
         } else {
-          console.warn(`[Service Worker] Failed to cache: ${asset}, status: ${response?.status}`);
+          console.warn(`[Service Worker] Failed to cache critical asset: ${asset}, status: ${response?.status}`);
           return false;
         }
       } catch (error) {
-        console.error(`[Service Worker] Error caching ${asset}:`, error);
+        console.error(`[Service Worker] Error caching critical asset ${asset}:`, error);
         // Não falha a instalação por causa de um único recurso
         return false;
       }
@@ -403,35 +603,65 @@ self.addEventListener('install', event => {
     return Promise.all(cachePromises);
   };
   
-  // Depois cacheia o restante dos recursos
-  const cacheRemaining = async () => {
+  // Depois cacheia os recursos importantes
+  const cacheImportantResources = async () => {
     const cache = await caches.open(CACHE_NAME);
-    console.log('[Service Worker] Caching remaining assets');
+    console.log('[Service Worker] Caching important assets');
     
-    const remainingAssets = ASSETS_TO_CACHE.filter(asset => !CORE_ASSETS.includes(asset));
-    
-    // Tenta cachear os recursos restantes, mas não falha se algum não puder ser cacheado
-    for (const asset of remainingAssets) {
+    // Cacheia cada recurso importante com tratamento de erros
+    const cachePromises = RESOURCES.IMPORTANT.map(async (asset) => {
       try {
         const request = new Request(asset);
-        const response = await fetch(request);
+        const response = await fetch(request, { cache: 'no-store' });
         
         if (response && response.status === 200) {
           await cache.put(asset, response);
-          console.log(`[Service Worker] Cached: ${asset}`);
+          console.log(`[Service Worker] Cached important asset: ${asset}`);
+          return true;
+        } else {
+          console.warn(`[Service Worker] Failed to cache important asset: ${asset}, status: ${response?.status}`);
+          return false;
         }
       } catch (error) {
-        console.warn(`[Service Worker] Non-critical asset not cached: ${asset}`);
+        console.warn(`[Service Worker] Non-critical asset not cached: ${asset}`, error);
+        return false;
+      }
+    });
+    
+    return Promise.all(cachePromises);
+  };
+  
+  // Por fim, cacheia os recursos adicionais
+  const cacheAdditionalResources = async () => {
+    const cache = await caches.open(CACHE_NAME);
+    console.log('[Service Worker] Caching additional assets');
+    
+    // Tenta cachear os recursos adicionais, mas não falha se algum não puder ser cacheado
+    for (const asset of RESOURCES.ADDITIONAL) {
+      try {
+        const request = new Request(asset);
+        const response = await fetch(request, { cache: 'no-store' });
+        
+        if (response && response.status === 200) {
+          await cache.put(asset, response);
+          console.log(`[Service Worker] Cached additional asset: ${asset}`);
+        }
+      } catch (error) {
+        console.warn(`[Service Worker] Additional asset not cached: ${asset}`);
       }
     }
   };
   
-  // Executa o cacheamento em duas etapas
+  // Executa o cacheamento em três etapas com prioridades diferentes
   event.waitUntil(
-    cacheEssentials()
+    cacheCriticalResources()
       .then(() => {
-        console.log('[Service Worker] Core assets cached successfully');
-        return cacheRemaining();
+        console.log('[Service Worker] Critical assets cached successfully');
+        return cacheImportantResources();
+      })
+      .then(() => {
+        console.log('[Service Worker] Important assets cached successfully');
+        return cacheAdditionalResources();
       })
       .then(() => {
         console.log('[Service Worker] All assets cached');
