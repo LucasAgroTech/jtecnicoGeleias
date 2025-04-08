@@ -492,38 +492,52 @@ self.addEventListener('fetch', event => {
           if (cachedResponse) {
             console.log(`[Service Worker] Serving home page from cache`);
             
-            // Atualiza o cache em segundo plano (stale-while-revalidate)
-            fetch(event.request)
-              .then(networkResponse => {
-                if (networkResponse && networkResponse.status === 200) {
-                  caches.open(CACHE_NAME).then(cache => {
-                    cache.put(event.request, networkResponse.clone());
-                    console.log('[Service Worker] Updated cached home page');
-                  });
-                }
-              })
-              .catch(error => {
-                console.log('[Service Worker] Failed to update cached home page:', error);
-              });
+            // Atualiza o cache em segundo plano (stale-while-revalidate) apenas se estiver online
+            if (navigator.onLine) {
+              fetch(event.request)
+                .then(networkResponse => {
+                  if (networkResponse && networkResponse.status === 200) {
+                    caches.open(CACHE_NAME).then(cache => {
+                      cache.put(event.request, networkResponse.clone());
+                      console.log('[Service Worker] Updated cached home page');
+                    });
+                  }
+                })
+                .catch(error => {
+                  console.log('[Service Worker] Failed to update cached home page:', error);
+                });
+            }
             
             return cachedResponse;
           }
           
-          // Se não estiver no cache, tenta buscar da rede
-          try {
-            const networkResponse = await fetch(event.request);
-            if (networkResponse && networkResponse.status === 200) {
-              const cache = await caches.open(CACHE_NAME);
-              await cache.put(event.request, networkResponse.clone());
-              return networkResponse;
+          // Se não estiver no cache, tenta buscar da rede apenas se estiver online
+          if (navigator.onLine) {
+            try {
+              const networkResponse = await fetch(event.request);
+              if (networkResponse && networkResponse.status === 200) {
+                const cache = await caches.open(CACHE_NAME);
+                await cache.put(event.request, networkResponse.clone());
+                return networkResponse;
+              }
+            } catch (error) {
+              console.log('[Service Worker] Failed to fetch home page from network');
             }
-          } catch (error) {
-            console.log('[Service Worker] Failed to fetch home page from network');
           }
           
-          // Se tudo falhar, retorna a versão offline da página inicial
+          // Se estiver offline ou tudo falhar, tenta usar a versão cacheada da home
           console.log('[Service Worker] Serving offline home page');
-          return await caches.match('/') || createOfflineResponse();
+          
+          // Tenta encontrar qualquer versão cacheada da home page
+          const cachedHome = await caches.match('/') || 
+                             await caches.match('/index.html');
+          
+          if (cachedHome) {
+            return cachedHome;
+          }
+          
+          // Se não encontrar nenhuma versão cacheada, cria uma resposta offline
+          return createOfflineResponse();
         } catch (error) {
           console.error('[Service Worker] Error serving home page:', error);
           return createOfflineResponse();

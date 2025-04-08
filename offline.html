@@ -162,10 +162,14 @@
         // Detecta mudanças na conexão
         window.addEventListener('online', () => {
             const statusElement = document.getElementById('connection-status');
-            statusElement.textContent = 'Conexão detectada! Redirecionando...';
-            setTimeout(() => {
+            statusElement.textContent = 'Conexão detectada! Você pode continuar usando o aplicativo.';
+            
+            // Atualiza o botão para permitir navegação manual
+            const reconnectBtn = document.querySelector('.btn.secondary');
+            reconnectBtn.textContent = 'Ir para o Formulário';
+            reconnectBtn.onclick = () => {
                 window.location.href = '/';
-            }, 1000);
+            };
         });
     </script>
 </body>

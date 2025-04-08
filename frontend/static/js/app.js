@@ -193,7 +193,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         try {
           const registration = await navigator.serviceWorker.register(paths[index], {
-            updateViaCache: 'none' // Não usar cache para atualizações do SW
+            updateViaCache: 'none', // Não usar cache para atualizações do SW
+            scope: '/' // Garante que o escopo seja a raiz do site
           });
           console.log('Service Worker registrado com sucesso usando:', paths[index]);
           console.log('Scope:', registration.scope);
@@ -206,6 +207,18 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.log('Service Worker já está ativo');
           } else {
             console.log('Aguardando ativação do Service Worker...');
+            
+            // Adiciona um listener para detectar quando o SW estiver ativo
+            registration.installing.addEventListener('statechange', (event) => {
+              if (event.target.state === 'activated') {
+                console.log('Service Worker ativado e controlando a página');
+                
+                // Notifica o usuário que o app está pronto para uso offline
+                if (!navigator.onLine) {
+                  showToast('Aplicativo pronto para uso offline', 5000, 'offline');
+                }
+              }
+            });
           }
           
           return registration;
@@ -222,7 +235,24 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Verifica se há atualizações pendentes
             registration.addEventListener('updatefound', () => {
               console.log('Nova versão do Service Worker encontrada!');
+              
+              // Adiciona um listener para detectar quando o novo SW estiver ativo
+              const newWorker = registration.installing;
+              if (newWorker) {
+                newWorker.addEventListener('statechange', () => {
+                  if (newWorker.state === 'activated') {
+                    console.log('Nova versão do Service Worker ativada');
+                    showToast('Aplicativo atualizado! Agora funciona melhor offline.', 5000);
+                  }
+                });
+              }
             });
+            
+            // Verifica se o navegador está offline e já tem um SW ativo
+            if (!navigator.onLine && registration.active) {
+              console.log('Navegador offline com Service Worker ativo - PWA pronto para uso offline');
+              showToast('Aplicativo pronto para uso offline', 5000, 'offline');
+            }
           }
         });
     } else {
