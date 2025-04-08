@@ -3,62 +3,170 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Formulário de Avaliação - Offline</title>
+    <title>Prêmio CNA Brasil Artesanal - Geleia (Offline)</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
-            padding: 20px;
-            background-color: #f5f5f5;
+            padding: 0;
+            background-color: #fff5f5;
             color: #333;
+            line-height: 1.6;
         }
         .container {
             max-width: 600px;
-            margin: 0 auto;
+            margin: 20px auto;
             background-color: white;
             padding: 20px;
             border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        header {
+            text-align: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
         }
         h1 {
-            color: #3498db;
+            color: #b71540;
+            margin: 0;
+            padding: 0;
+        }
+        .status {
+            display: inline-block;
+            background-color: #e74c3c;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        .info-box {
+            background-color: #f8f4e8;
+            border-left: 4px solid #f39c12;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 0 4px 4px 0;
         }
         .btn {
-            background-color: #3498db;
+            display: inline-block;
+            background-color: #b71540;
             color: white;
             border: none;
-            padding: 10px 15px;
+            padding: 12px 20px;
             border-radius: 4px;
             cursor: pointer;
             font-size: 16px;
-            margin-top: 20px;
+            font-weight: bold;
+            text-decoration: none;
+            margin-right: 10px;
+            margin-top: 10px;
+            transition: background-color 0.2s;
         }
-        .info {
-            background-color: #e8f4f8;
-            padding: 15px;
-            border-radius: 4px;
+        .btn:hover {
+            background-color: #900d30;
+        }
+        .btn.secondary {
+            background-color: #3498db;
+        }
+        .btn.secondary:hover {
+            background-color: #2980b9;
+        }
+        .buttons {
+            margin-top: 20px;
+            text-align: center;
+        }
+        .connection-status {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 14px;
+            color: #666;
+        }
+        .steps {
             margin: 20px 0;
+        }
+        .steps ol {
+            padding-left: 20px;
+        }
+        .steps li {
+            margin-bottom: 10px;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Formulário de Avaliação</h1>
-        <div class="info">
-            <p><strong>Você está offline</strong>, mas o aplicativo ainda está disponível.</p>
-            <p>Você pode continuar usando o formulário normalmente. As avaliações serão salvas localmente e sincronizadas quando você estiver online novamente.</p>
+        <header>
+            <h1>Prêmio CNA Brasil Artesanal</h1>
+            <div class="status">Offline</div>
+        </header>
+        
+        <div class="info-box">
+            <p><strong>Você está offline</strong>, mas o aplicativo continua funcionando normalmente.</p>
+            <p>Todas as avaliações serão salvas localmente e sincronizadas automaticamente quando você estiver online novamente.</p>
         </div>
-        <p>Clique no botão abaixo para acessar o formulário:</p>
-        <a href="/" class="btn">Ir para o Formulário</a>
-        <button class="btn" onclick="window.location.reload()" style="margin-left: 10px;">Tentar Reconectar</button>
+        
+        <div class="steps">
+            <h3>Como usar o aplicativo offline:</h3>
+            <ol>
+                <li>Clique no botão "Ir para o Formulário" abaixo</li>
+                <li>Preencha as avaliações normalmente</li>
+                <li>Seus dados serão salvos no dispositivo</li>
+                <li>Quando reconectar à internet, os dados serão sincronizados automaticamente</li>
+            </ol>
+        </div>
+        
+        <div class="buttons">
+            <a href="/" class="btn">Ir para o Formulário</a>
+            <button class="btn secondary" onclick="checkConnection()">Tentar Reconectar</button>
+        </div>
+        
+        <div class="connection-status" id="connection-status">
+            Verificando conexão...
+        </div>
     </div>
+    
     <script>
+        // Função para verificar a conexão
+        function checkConnection() {
+            const statusElement = document.getElementById('connection-status');
+            
+            if (navigator.onLine) {
+                statusElement.textContent = 'Conexão detectada! Redirecionando...';
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 1000);
+            } else {
+                statusElement.textContent = 'Ainda offline. Tente novamente mais tarde.';
+                setTimeout(() => {
+                    statusElement.textContent = 'Verificando conexão...';
+                }, 3000);
+            }
+        }
+        
+        // Verifica a conexão quando a página carrega
+        document.addEventListener('DOMContentLoaded', () => {
+            checkConnection();
+        });
+        
         // Verifica periodicamente se a conexão foi restabelecida
         setInterval(() => {
+            const statusElement = document.getElementById('connection-status');
+            
             if (navigator.onLine) {
-                window.location.reload();
+                statusElement.textContent = 'Conexão detectada! Você pode continuar usando o aplicativo normalmente.';
+            } else {
+                statusElement.textContent = 'Verificando conexão...';
             }
-        }, 5000);
+        }, 10000);
+        
+        // Detecta mudanças na conexão
+        window.addEventListener('online', () => {
+            const statusElement = document.getElementById('connection-status');
+            statusElement.textContent = 'Conexão detectada! Redirecionando...';
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 1000);
+        });
     </script>
 </body>
 </html>

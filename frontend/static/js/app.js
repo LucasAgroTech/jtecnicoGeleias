@@ -1,41 +1,162 @@
-document.addEventListener('DOMContentLoaded', () => {
-  // Verifica o status da conexão e mostra mensagem se estiver offline
-  if (!navigator.onLine) {
-    console.log('Aplicativo iniciado em modo offline');
-    setTimeout(() => {
-      // Mostra uma mensagem amigável informando que o app está funcionando offline
-      const toast = document.createElement('div');
-      toast.id = 'offline-toast';
-      toast.innerHTML = `
-        <div style="display: flex; align-items: center;">
-          <span style="margin-right: 10px;">📴</span>
-          <span>Você está offline, mas o aplicativo está funcionando normalmente.</span>
-        </div>
-      `;
-      toast.style.cssText = `
-        position: fixed;
-        top: 60px;
-        left: 50%;
-        transform: translateX(-50%);
-        background-color: #333;
-        color: white;
-        padding: 12px 20px;
-        border-radius: 4px;
-        z-index: 1000;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-        max-width: 90%;
-      `;
-      
-      document.body.appendChild(toast);
-      
-      // Remove após 5 segundos
-      setTimeout(() => {
-        toast.style.opacity = '0';
-        toast.style.transition = 'opacity 0.5s';
-        setTimeout(() => toast.remove(), 500);
-      }, 5000);
-    }, 1000);
+// Versão do app - deve corresponder à versão no service worker
+const APP_VERSION = '1.1.0';
+
+// Função para verificar se o app está sendo executado como PWA instalado
+const isPWA = () => {
+  return window.matchMedia('(display-mode: standalone)').matches || 
+         window.navigator.standalone || 
+         document.referrer.includes('android-app://');
+};
+
+// Função para mostrar uma mensagem toast
+const showToast = (message, duration = 5000, type = 'info') => {
+  // Remove qualquer toast existente
+  const existingToast = document.getElementById('app-toast');
+  if (existingToast) {
+    existingToast.remove();
   }
+  
+  // Cria um novo toast
+  const toast = document.createElement('div');
+  toast.id = 'app-toast';
+  
+  // Define o ícone com base no tipo
+  let icon = '📱';
+  if (type === 'offline') icon = '📴';
+  if (type === 'online') icon = '🌐';
+  if (type === 'error') icon = '⚠️';
+  
+  toast.innerHTML = `
+    <div style="display: flex; align-items: center;">
+      <span style="margin-right: 10px;">${icon}</span>
+      <span>${message}</span>
+    </div>
+  `;
+  
+  // Estilo baseado no tipo
+  let backgroundColor = '#333';
+  if (type === 'offline') backgroundColor = '#e74c3c';
+  if (type === 'online') backgroundColor = '#2ecc71';
+  if (type === 'error') backgroundColor = '#e67e22';
+  
+  toast.style.cssText = `
+    position: fixed;
+    top: 60px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: ${backgroundColor};
+    color: white;
+    padding: 12px 20px;
+    border-radius: 4px;
+    z-index: 1000;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    max-width: 90%;
+    animation: fadeIn 0.3s ease-out;
+  `;
+  
+  // Adiciona o toast ao corpo do documento
+  document.body.appendChild(toast);
+  
+  // Remove após o tempo especificado
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transition = 'opacity 0.5s';
+    setTimeout(() => toast.remove(), 500);
+  }, duration);
+};
+
+// Função para verificar o status do service worker
+const checkServiceWorkerStatus = async () => {
+  if (!('serviceWorker' in navigator)) {
+    console.warn('Service Workers não são suportados neste navegador');
+    return false;
+  }
+  
+  try {
+    const registration = await navigator.serviceWorker.getRegistration();
+    return registration && (registration.active || registration.installing || registration.waiting);
+  } catch (error) {
+    console.error('Erro ao verificar status do Service Worker:', error);
+    return false;
+  }
+};
+
+document.addEventListener('DOMContentLoaded', async () => {
+  console.log('App versão:', APP_VERSION);
+  console.log('Executando como PWA:', isPWA());
+  
+  // Verifica se o service worker está ativo
+  const swActive = await checkServiceWorkerStatus();
+  console.log('Service Worker ativo:', swActive);
+  
+  // Verifica o status da conexão
+  const isOffline = !navigator.onLine;
+  console.log('Status de conexão:', isOffline ? 'Offline' : 'Online');
+  
+  // Se estiver offline, mostra uma mensagem amigável
+  if (isOffline) {
+    console.log('Aplicativo iniciado em modo offline');
+    
+    // Atrasa um pouco para garantir que a página esteja carregada
+    setTimeout(() => {
+      showToast('Você está offline, mas o aplicativo está funcionando normalmente.', 5000, 'offline');
+    }, 1000);
+    
+    // Atualiza o indicador de status
+    const statusEl = document.getElementById('connection-status');
+    if (statusEl) {
+      statusEl.textContent = 'Offline';
+      statusEl.classList.add('offline');
+    }
+  }
+  
+  // Ouve mensagens do service worker
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    if (event.data && event.data.type === 'SW_ACTIVATED') {
+      console.log('Service Worker ativado, versão:', event.data.version);
+      
+      // Se a versão do SW for diferente da versão do app, sugere recarregar
+      if (event.data.version !== APP_VERSION) {
+        showToast('Nova versão disponível. Recarregue a página para atualizar.', 10000);
+      }
+    }
+  });
+  
+  // Adiciona listeners para eventos de conectividade
+  window.addEventListener('online', () => {
+    console.log('Conexão online detectada');
+    
+    // Atualiza o indicador de status
+    const statusEl = document.getElementById('connection-status');
+    if (statusEl) {
+      statusEl.textContent = 'Online';
+      statusEl.classList.remove('offline');
+    }
+    
+    // Mostra uma mensagem toast
+    showToast('Você está online novamente. Suas avaliações serão sincronizadas automaticamente.', 5000, 'online');
+    
+    // Tenta sincronizar dados pendentes
+    if (typeof syncManager !== 'undefined') {
+      setTimeout(() => {
+        syncManager.syncData();
+      }, 2000);
+    }
+  });
+  
+  window.addEventListener('offline', () => {
+    console.log('Conexão offline detectada');
+    
+    // Atualiza o indicador de status
+    const statusEl = document.getElementById('connection-status');
+    if (statusEl) {
+      statusEl.textContent = 'Offline';
+      statusEl.classList.add('offline');
+    }
+    
+    // Mostra uma mensagem toast
+    showToast('Você está offline. Suas avaliações serão salvas localmente e sincronizadas quando você estiver online novamente.', 5000, 'offline');
+  });
   
     // Lista de códigos CNA para geleia
     const cnaCodes = [
@@ -51,24 +172,61 @@ document.addEventListener('DOMContentLoaded', () => {
       'CNA-6645'
     ];
     
-    // Registra Service Worker
+    // Registra Service Worker com múltiplas tentativas de caminhos
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js')
+      // Lista de possíveis caminhos para o service worker
+      const swPaths = [
+        '/sw.js',                // Caminho absoluto da raiz
+        './sw.js',               // Caminho relativo
+        '../sw.js',              // Um nível acima
+        '../../sw.js',           // Dois níveis acima
+        '../../../sw.js',        // Três níveis acima
+        window.location.pathname + 'sw.js' // Baseado no caminho atual
+      ];
+      
+      // Função para tentar registrar com diferentes caminhos
+      const tryRegisterSW = async (paths, index = 0) => {
+        if (index >= paths.length) {
+          console.error('Falha em todas as tentativas de registro do Service Worker');
+          return;
+        }
+        
+        try {
+          const registration = await navigator.serviceWorker.register(paths[index], {
+            updateViaCache: 'none' // Não usar cache para atualizações do SW
+          });
+          console.log('Service Worker registrado com sucesso usando:', paths[index]);
+          console.log('Scope:', registration.scope);
+          
+          // Força a atualização do service worker
+          registration.update();
+          
+          // Verifica se o service worker está ativo
+          if (registration.active) {
+            console.log('Service Worker já está ativo');
+          } else {
+            console.log('Aguardando ativação do Service Worker...');
+          }
+          
+          return registration;
+        } catch (error) {
+          console.warn(`Falha ao registrar SW com ${paths[index]}:`, error);
+          return tryRegisterSW(paths, index + 1);
+        }
+      };
+      
+      // Inicia o processo de registro
+      tryRegisterSW(swPaths)
         .then(registration => {
-          console.log('Service Worker registered with scope:', registration.scope);
-        })
-        .catch(error => {
-          console.error('Service Worker registration failed:', error);
-          console.log('Tentando caminho alternativo...');
-          // Tenta um caminho alternativo se o primeiro falhar
-          navigator.serviceWorker.register('./sw.js')
-            .then(registration => {
-              console.log('Service Worker registrado com caminho alternativo, scope:', registration.scope);
-            })
-            .catch(altError => {
-              console.error('Falha no registro do Service Worker com caminho alternativo:', altError);
+          if (registration) {
+            // Verifica se há atualizações pendentes
+            registration.addEventListener('updatefound', () => {
+              console.log('Nova versão do Service Worker encontrada!');
             });
+          }
         });
+    } else {
+      console.warn('Service Workers não são suportados neste navegador. Funcionalidade offline limitada.');
     }
     
     // Inicializa o gerenciador de sincronização
